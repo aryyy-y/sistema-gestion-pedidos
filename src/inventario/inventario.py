@@ -1,44 +1,53 @@
 from abc import ABC, abstractmethod
-from typing import Dict, List
 
 
-class ObservadorInventario(ABC):
+class InterfazInventario(ABC):
+    """Interfaz que espera nuestro sistema de pedidos."""
+
     @abstractmethod
-    def actualizar(self, producto: str, stock_actual: int) -> None:
+    def agregar_producto(self, producto: str, cantidad: int) -> None:
+        pass
+
+    @abstractmethod
+    def obtener_stock(self, producto: str) -> int:
+        pass
+
+    @abstractmethod
+    def reducir_stock(self, producto: str, cantidad: int) -> bool:
         pass
 
 
-class NotificadorStockBajo(ObservadorInventario):
-    def __init__(self, umbral: int = 5):
-        self.umbral = umbral
+class SistemaInventarioExterno:
+    """Adaptee: un sistema externo/legado con una interfaz distinta e incompatible."""
 
-    def actualizar(self, producto: str, stock_actual: int) -> None:
-        if stock_actual <= self.umbral:
-            print(f"⚠️  Stock bajo de '{producto}': quedan {stock_actual} unidades")
-
-
-class Inventario:
     def __init__(self):
-        self._stock: Dict[str, int] = {}
-        self._observadores: List[ObservadorInventario] = []
+        self._existencias = {}
 
-    def agregar_observador(self, observador: ObservadorInventario) -> None:
-        self._observadores.append(observador)
+    def registrar_existencia(self, codigo_producto: str, cantidad: int) -> None:
+        self._existencias[codigo_producto] = self._existencias.get(codigo_producto, 0) + cantidad
 
-    def agregar_producto(self, producto: str, cantidad: int) -> None:
-        self._stock[producto] = self._stock.get(producto, 0) + cantidad
+    def consultar_existencia(self, codigo_producto: str) -> int:
+        return self._existencias.get(codigo_producto, 0)
 
-    def obtener_stock(self, producto: str) -> int:
-        return self._stock.get(producto, 0)
-
-    def reducir_stock(self, producto: str, cantidad: int) -> bool:
-        disponible = self._stock.get(producto, 0)
-        if cantidad <= 0 or cantidad > disponible:
+    def descontar_existencia(self, codigo_producto: str, cantidad: int) -> bool:
+        actual = self._existencias.get(codigo_producto, 0)
+        if cantidad <= 0 or cantidad > actual:
             return False
-        self._stock[producto] = disponible - cantidad
-        self._notificar(producto, self._stock[producto])
+        self._existencias[codigo_producto] = actual - cantidad
         return True
 
-    def _notificar(self, producto: str, stock_actual: int) -> None:
-        for observador in self._observadores:
-            observador.actualizar(producto, stock_actual)
+
+class InventarioAdapter(InterfazInventario):
+    """Adapta SistemaInventarioExterno a la interfaz InterfazInventario que espera la app."""
+
+    def __init__(self, sistema_externo: SistemaInventarioExterno = None):
+        self._sistema = sistema_externo or SistemaInventarioExterno()
+
+    def agregar_producto(self, producto: str, cantidad: int) -> None:
+        self._sistema.registrar_existencia(producto, cantidad)
+
+    def obtener_stock(self, producto: str) -> int:
+        return self._sistema.consultar_existencia(producto)
+
+    def reducir_stock(self, producto: str, cantidad: int) -> bool:
+        return self._sistema.descontar_existencia(producto, cantidad)
